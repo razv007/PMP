@@ -1,0 +1,47 @@
+from pgmpy.models import MarkovModel
+from pgmpy.factors.discrete import DiscreteFactor
+import networkx as nx
+import matplotlib.pyplot as plt
+import numpy as np
+import itertools
+import pandas as pd
+
+V=["A1","A2","A3","A4","A5"]
+E=[("A1","A2"),("A1","A3"),("A2","A4"),("A2","A5"),("A3","A4"),("A4","A5")]
+M=MarkovModel(E)
+G=nx.Graph(); G.add_nodes_from(V); G.add_edges_from(E)
+plt.figure(figsize=(5,4)); nx.draw(G, with_labels=True, node_size=600); plt.show()
+C=list(nx.find_cliques(G)); print("Cliques:",C)
+
+sm={0:-1,1:1}
+F=[]
+for c in C:
+    vars=list(c)
+    vals=[]
+    for a in itertools.product([0,1], repeat=len(vars)):
+        s=0
+        for v,sv in zip(vars,a):
+            s += int(v[1:]) * sm[sv]
+        vals.append(np.exp(s))
+    fac=DiscreteFactor(variables=vars, cardinality=[2]*len(vars), values=np.array(vals))
+    try: M.add_factors(fac)
+    except: pass
+    F.append((vars, np.array(vals)))
+
+A=list(itertools.product([0,1], repeat=5))
+rows=[]
+for a in A:
+    amap={V[i]: sm[a[i]] for i in range(5)}
+    u=1.0
+    for vars,vals in F:
+        s=0
+        for v in vars: s += int(v[1:]) * amap[v]
+        u *= np.exp(s)
+    rows.append((amap,u))
+
+Z=sum(r[1] for r in rows)
+df=pd.DataFrame([{**r[0], "u": r[1], "p": r[1]/Z} for r in rows])
+df=df.sort_values("p", ascending=False).reset_index(drop=True)
+print(df.head(5))
+best=df.iloc[0]
+print("MAP:", best[["A1","A2","A3","A4","A5","p"]])
