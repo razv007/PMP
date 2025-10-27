@@ -1,0 +1,57 @@
+import numpy as np
+import itertools
+from pgmpy.models import MarkovModel
+from pgmpy.factors.discrete import DiscreteFactor
+from pgmpy.inference import BeliefPropagation
+
+n=5
+V=[f"x{i}" for i in range(n*n)]
+E=[]
+for r in range(n):
+    for c in range(n):
+        i=r*n+c
+        if r>0: E.append((f"x{i}",f"x{(r-1)*n+c}"))
+        if c>0: E.append((f"x{i}",f"x{r*n+(c-1)}"))
+
+M=MarkovModel(E)
+
+orig=np.zeros((n,n),dtype=int)
+orig[1:4,1:4]=1
+
+np.random.seed(0)
+k=max(1,round(0.1*n*n))
+noi=orig.copy()
+idxs=np.random.choice(n*n,k,replace=False)
+for t in idxs:
+    r,tc=divmod(t,n)
+    noi[r,tc]=1-noi[r,tc]
+
+lam=2.0
+F=[]
+for r in range(n):
+    for c in range(n):
+        v=f"x{r*n+c}"
+        y=int(noi[r,c])
+        vals=[np.exp(-lam*(s-y)**2) for s in [0,1]]
+        fac=DiscreteFactor(variables=[v],cardinality=[2],values=np.array(vals))
+        M.add_factors(fac)
+        F.append(fac)
+
+added=set()
+for (a,b) in E:
+    if (a,b) in added or (b,a) in added: continue
+    added.add((a,b))
+    vals=[]
+    for sa,sb in itertools.product([0,1],[0,1]):
+        vals.append(np.exp(-((sa-sb)**2)))
+    fac=DiscreteFactor(variables=[a,b],cardinality=[2,2],values=np.array(vals).reshape((2,2)))
+    M.add_factors(fac)
+    F.append(fac)
+
+bp=BeliefPropagation(M)
+mp=bp.map_query(variables=V)
+den=np.array([mp[f"x{i}"] for i in range(n*n)]).reshape((n,n))
+
+print("orig\n",orig)
+print("noisy\n",noi)
+print("denoised\n",den)
